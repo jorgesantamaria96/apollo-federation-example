@@ -1,19 +1,32 @@
-const { ApolloGateway } = require("@apollo/gateway");
-const { ApolloServer } = require("apollo-server");
+const express = require("express");
+const http = require("http");
+const { ApolloGateway, IntrospectAndCompose } = require("@apollo/gateway");
+const { ApolloServer } = require("apollo-server-express");
+const { ApolloServerPluginDrainHttpServer } = require("apollo-server-core");
 
 const gateway = new ApolloGateway({
-  serviceList: [
-    { name: "users", url: "http://localhost:5001/" },
-    { name: "posts", url: "http://localhost:5002/" },
-  ],
+  supergraphSdl: new IntrospectAndCompose({
+    subgraphs: [
+      { name: "users", url: "http://localhost:5001/" },
+      { name: "posts", url: "http://localhost:5002/" },
+    ],
+  }),
 });
 
 (async () => {
+  const app = express();
+  const httpServer = http.createServer(app);
   const { schema, executor } = await gateway.load();
 
-  const server = new ApolloServer({ schema, executor });
+  const server = new ApolloServer({
+    schema,
+    executor,
+    plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
+  });
+  await server.start();
+  server.applyMiddleware({ app });
 
-  server.listen(5000).then(({ url }) => {
-    console.log(`🚀 Gateway ready at ${url}`);
+  httpServer.listen(5000, () => {
+    console.log(`🚀 Gateway ready at http://localhost:5000/graphql`);
   });
 })();
